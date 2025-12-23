@@ -6,19 +6,15 @@ const bodyParser = require('body-parser');
 const app = express();
 const PORT = 3000;
 
-// Middleware
 app.use(cors());
 app.use(bodyParser.json());
 
-// Підключення до БД
 const db = new sqlite3.Database('./cinema.db', (err) => {
     if (err) console.error(err.message);
     console.log('Connected to the SQLite database.');
 });
 
-// --- ІНІЦІАЛІЗАЦІЯ ТАБЛИЦЬ ---
 db.serialize(() => {
-    // 1. Ваша таблиця бронювань (без змін)
     db.run(`CREATE TABLE IF NOT EXISTS bookings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         movie_id INTEGER,
@@ -28,14 +24,12 @@ db.serialize(() => {
         UNIQUE(movie_id, seat_index)
     )`);
 
-    // 2. НОВА таблиця для фільмів
     db.run(`CREATE TABLE IF NOT EXISTS movies (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT,
         price INTEGER
     )`);
 
-    // 3. Додаємо стартові фільми, якщо їх немає
     db.get("SELECT count(*) as count FROM movies", (err, row) => {
         if (row && row.count === 0) {
             const stmt = db.prepare("INSERT INTO movies (title, price) VALUES (?, ?)");
@@ -48,9 +42,6 @@ db.serialize(() => {
     });
 });
 
-// --- API ---
-
-// 1. Отримати список фільмів (НОВЕ)
 app.get('/api/movies', (req, res) => {
     db.all("SELECT * FROM movies", [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -58,7 +49,6 @@ app.get('/api/movies', (req, res) => {
     });
 });
 
-// 2. Додати фільм - для адміна (НОВЕ)
 app.post('/api/movies', (req, res) => {
     const { title, price } = req.body;
     if (!title || !price) return res.status(400).json({ error: "Вкажіть дані" });
@@ -71,7 +61,6 @@ app.post('/api/movies', (req, res) => {
     stmt.finalize();
 });
 
-// 3. Отримати зайняті місця (ВАШ КОД)
 app.get('/api/seats/:movieId', (req, res) => {
     const movieId = req.params.movieId;
     const sql = `SELECT seat_index FROM bookings WHERE movie_id = ?`;
@@ -81,9 +70,7 @@ app.get('/api/seats/:movieId', (req, res) => {
     });
 });
 
-// 4. Зберегти бронювання (ВАШ КОД)
-// Примітка: Завдяки UNIQUE(movie_id, seat_index) у таблиці,
-// база даних сама видасть помилку, якщо місце зайняте.
+
 app.post('/api/book', (req, res) => {
     const { movieId, seats, name, email } = req.body;
     const stmt = db.prepare(`INSERT INTO bookings (movie_id, seat_index, user_name, user_email) VALUES (?, ?, ?, ?)`);
@@ -98,7 +85,6 @@ app.post('/api/book', (req, res) => {
 
     setTimeout(() => {
         if (errors.length > 0) {
-            // Тут ми ловимо помилку UNIQUE constraint failed, якщо місце зайняте
             res.status(400).json({ status: 'error', message: 'Місця вже зайняті', errors });
         } else {
             res.json({ status: 'success', message: 'Успішно!' });
